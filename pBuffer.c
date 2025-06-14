@@ -5,136 +5,140 @@
 #define TAMANHO_NOME 10
 #define TAMANHO_EMAIL 10
 #define TAMANHO_PESSOA (TAMANHO_NOME + sizeof(int) + TAMANHO_EMAIL)
-#define TAMANHO_BUFFER (2 * sizeof(int) + MAX_PESSOAS * TAMANHO_PESSOA)
+#define TAMANHO_INICIAL (3 * sizeof(int) + TAMANHO_PESSOA)
 #define MAX_PESSOAS 100
 
-static char* buffer = NULL;
-static size_t offset = 0;
+void* pBuffer;
 
 void inicializarBuffer() {
-    buffer = (char*)malloc(TAMANHO_BUFFER);
-    if (!buffer) {
+    pBuffer = malloc(TAMANHO_INICIAL);
+    if (!pBuffer) {
         printf("Erro ao alocar memoria\n");
         exit(1);
     }
-    memset(buffer, 0, TAMANHO_BUFFER);
-    offset = 2 * sizeof(int);
+    memset(pBuffer, 0, TAMANHO_INICIAL);
+    *(int*)((char*)pBuffer + sizeof(int)) = 0;
 }
 
-int encontrarPessoa(const char* nome) {
-    int* qtdPessoas = (int*)(buffer + sizeof(int));
-    size_t currentOffset = 2 * sizeof(int);
+void redimensionarBuffer(int aumentar) {
+    void* novoBuffer = realloc(pBuffer, 
+        aumentar ? 
+        *(int*)((char*)pBuffer + 2 * sizeof(int)) + TAMANHO_PESSOA :
+        *(int*)((char*)pBuffer + 2 * sizeof(int)) - TAMANHO_PESSOA);
     
-    for (int i = 0; i < *qtdPessoas; i++) {
-        if (strcmp(buffer + currentOffset, nome) == 0) {
-            return i;
+    if (!novoBuffer) {
+        printf("Erro ao redimensionar memoria\n");
+        return;
+    }
+    
+    pBuffer = novoBuffer;
+    printf("Buffer redimensionado para %d bytes\n", *(int*)((char*)pBuffer + 2 * sizeof(int)));
+}
+
+int encontrarPessoa() {
+    char* current = (char*)pBuffer + 3 * sizeof(int);
+    
+    for (*(int*)pBuffer = 0; *(int*)pBuffer < *(int*)((char*)pBuffer + sizeof(int)); (*(int*)pBuffer)++) {
+        if (strcmp(current, (char*)pBuffer + TAMANHO_INICIAL) == 0) {
+            return *(int*)pBuffer;
         }
-        currentOffset += TAMANHO_PESSOA;
+        current += TAMANHO_PESSOA;
     }
     return -1;
 }
 
 void adicionarPessoa() {
-    if (offset >= TAMANHO_BUFFER) {
-        printf("Agenda cheia!\n");
+    if (*(int*)((char*)pBuffer + sizeof(int)) >= MAX_PESSOAS) {
+        printf("Limite máximo de pessoas atingido!\n");
         return;
     }
 
-    int* qtdPessoas = (int*)(buffer + sizeof(int));
-    
-    if (*qtdPessoas >= MAX_PESSOAS) {
-        printf("Agenda cheia!\n");
-        return;
+    if (*(int*)((char*)pBuffer + 2 * sizeof(int)) + TAMANHO_PESSOA > *(int*)((char*)pBuffer + 2 * sizeof(int))) {
+        redimensionarBuffer(1);
     }
 
     printf("Digite o nome (max %d caracteres): ", TAMANHO_NOME);
-    scanf("%s", buffer + offset);
-    offset += TAMANHO_NOME;
+    scanf("%s", (char*)pBuffer + *(int*)((char*)pBuffer + 2 * sizeof(int)));
+    *(int*)((char*)pBuffer + 2 * sizeof(int)) += TAMANHO_NOME;
 
     printf("Digite a idade: ");
-    scanf("%d", (int*)(buffer + offset));
-    offset += sizeof(int);
+    scanf("%d", (int*)((char*)pBuffer + *(int*)((char*)pBuffer + 2 * sizeof(int))));
+    *(int*)((char*)pBuffer + 2 * sizeof(int)) += sizeof(int);
 
     printf("Digite o email (max %d caracteres): ", TAMANHO_EMAIL);
-    scanf("%s", buffer + offset);
-    offset += TAMANHO_EMAIL;
+    scanf("%s", (char*)pBuffer + *(int*)((char*)pBuffer + 2 * sizeof(int)));
+    *(int*)((char*)pBuffer + 2 * sizeof(int)) += TAMANHO_EMAIL;
 
-    (*qtdPessoas)++;
+    (*(int*)((char*)pBuffer + sizeof(int)))++;
     printf("Pessoa adicionada com sucesso!\n");
 }
 
 void removerPessoa() {
-    char nome[TAMANHO_NOME];
     printf("Digite o nome da pessoa a ser removida: ");
-    scanf("%s", nome);
+    scanf("%s", (char*)pBuffer + TAMANHO_INICIAL);
 
-    int index = encontrarPessoa(nome);
-    if (index == -1) {
+    *(int*)pBuffer = encontrarPessoa();
+    if (*(int*)pBuffer == -1) {
         printf("Pessoa nao encontrada!\n");
         return;
     }
 
-    int* qtdPessoas = (int*)(buffer + sizeof(int));
-    size_t posicaoRemover = 2 * sizeof(int) + (index * TAMANHO_PESSOA);
-    size_t posicaoProxima = posicaoRemover + TAMANHO_PESSOA;
-    size_t bytesParaMover = offset - posicaoProxima;
-
-    if (bytesParaMover > 0) {
-        memmove(buffer + posicaoRemover, buffer + posicaoProxima, bytesParaMover);
+    char* posicaoRemover = (char*)pBuffer + 3 * sizeof(int) + (*(int*)pBuffer * TAMANHO_PESSOA);
+    char* posicaoProxima = posicaoRemover + TAMANHO_PESSOA;
+    
+    if (*(int*)((char*)pBuffer + 2 * sizeof(int)) - (posicaoProxima - (char*)pBuffer) > 0) {
+        memmove(posicaoRemover, posicaoProxima, *(int*)((char*)pBuffer + 2 * sizeof(int)) - (posicaoProxima - (char*)pBuffer));
     }
 
-    offset -= TAMANHO_PESSOA;
-    (*qtdPessoas)--;
+    *(int*)((char*)pBuffer + 2 * sizeof(int)) -= TAMANHO_PESSOA;
+    (*(int*)((char*)pBuffer + sizeof(int)))--;
+    
+    redimensionarBuffer(0);
     printf("Pessoa removida com sucesso!\n");
 }
 
 void buscarPessoa() {
-    char nome[TAMANHO_NOME];
     printf("Digite o nome da pessoa a ser buscada: ");
-    scanf("%s", nome);
+    scanf("%s", (char*)pBuffer + TAMANHO_INICIAL);
 
-    int index = encontrarPessoa(nome);
-    if (index == -1) {
+    *(int*)pBuffer = encontrarPessoa();
+    if (*(int*)pBuffer == -1) {
         printf("Pessoa nao encontrada!\n");
         return;
     }
 
-    size_t posicao = 2 * sizeof(int) + (index * TAMANHO_PESSOA);
+    char* posicao = (char*)pBuffer + 3 * sizeof(int) + (*(int*)pBuffer * TAMANHO_PESSOA);
     printf("\nDados da pessoa:\n");
-    printf("Nome: %s\n", buffer + posicao);
-    printf("Idade: %d\n", *(int*)(buffer + posicao + TAMANHO_NOME));
-    printf("Email: %s\n", buffer + posicao + TAMANHO_NOME + sizeof(int));
+    printf("Nome: %s\n", posicao);
+    printf("Idade: %d\n", *(int*)(posicao + TAMANHO_NOME));
+    printf("Email: %s\n", posicao + TAMANHO_NOME + sizeof(int));
 }
 
 void listarTodos() {
-    int* qtdPessoas = (int*)(buffer + sizeof(int));
-    
-    if (*qtdPessoas == 0) {
+    if (*(int*)((char*)pBuffer + sizeof(int)) == 0) {
         printf("Agenda vazia!\n");
         return;
     }
 
     printf("\nLista de Pessoas:\n");
-    size_t currentOffset = 2 * sizeof(int);
+    char* current = (char*)pBuffer + 3 * sizeof(int);
     
-    for (int i = 0; i < *qtdPessoas; i++) {
-        printf("Pessoa %d:\n", i + 1);
-        printf("Nome: %s\n", buffer + currentOffset);
-        currentOffset += TAMANHO_NOME;
+    for (*(int*)pBuffer = 0; *(int*)pBuffer < *(int*)((char*)pBuffer + sizeof(int)); (*(int*)pBuffer)++) {
+        printf("Pessoa %d:\n", *(int*)pBuffer + 1);
+        printf("Nome: %s\n", current);
+        current += TAMANHO_NOME;
         
-        printf("Idade: %d\n", *(int*)(buffer + currentOffset));
-        currentOffset += sizeof(int);
+        printf("Idade: %d\n", *(int*)current);
+        current += sizeof(int);
         
-        printf("Email: %s\n", buffer + currentOffset);
-        currentOffset += TAMANHO_EMAIL;
+        printf("Email: %s\n", current);
+        current += TAMANHO_EMAIL;
         printf("-------------------\n");
     }
 }
 
 int main() {
     inicializarBuffer();
-    int opcao;
-    int* opcaoPtr = (int*)buffer;
     
     do {
         printf("\n=== Agenda ===\n");
@@ -144,9 +148,9 @@ int main() {
         printf("4. Listar todos\n");
         printf("0. Sair\n");
         printf("Escolha uma opcao: ");
-        scanf("%d", opcaoPtr);
+        scanf("%d", (int*)pBuffer);
         
-        switch (*opcaoPtr) {
+        switch (*(int*)pBuffer) {
             case 1:
                 adicionarPessoa();
                 break;
@@ -165,8 +169,8 @@ int main() {
             default:
                 printf("Opcao invalida!\n");
         }
-    } while (*opcaoPtr != 0);
+    } while (*(int*)pBuffer != 0);
 
-    free(buffer);
+    free(pBuffer);
     return 0;
-} 
+}
